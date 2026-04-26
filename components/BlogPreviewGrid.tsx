@@ -16,7 +16,7 @@ export function BlogPreviewGrid({ posts }: { posts: BlogPost[] }) {
             <img src={post.coverImage} alt={post.title} className="h-48 w-full object-cover" loading="lazy" />
             <div className="space-y-3 p-5">
               <h3 className="text-2xl leading-tight">{post.title}</h3>
-              <p className="text-sm leading-7 text-ink/80">{post.intro}</p>
+              <p className="text-sm leading-7 text-ink/80">{post.introText}</p>
               <Link href={`/blog/${post.slug}`} className="text-sm text-moss hover:underline">
                 Continue reading
               </Link>

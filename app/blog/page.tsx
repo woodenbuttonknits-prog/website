@@ -18,7 +18,7 @@ export default async function BlogIndexPage() {
             <img src={post.coverImage} alt={post.title} className="h-36 w-full rounded-2xl object-cover" loading="lazy" />
             <div>
               <h2 className="text-2xl">{post.title}</h2>
-              <p className="mt-3 leading-8 text-ink/80">{post.intro}</p>
+              <p className="mt-3 leading-8 text-ink/80">{post.introText}</p>
               <Link href={`/blog/${post.slug}`} className="mt-3 inline-block text-sm text-moss hover:underline">
                 Read article
               </Link>
