@@ -1,12 +1,13 @@
 # Wooden Button Knits
 
-A calm, content-first Next.js site designed around slow making and nature-inspired storytelling.
+A calm, nature-inspired headless website for Wooden Button Knits.
 
 ## Stack
 
-- Next.js + Tailwind CSS
-- Headless CMS integration (Contentful out of the box with mock fallback)
-- Mailchimp / ConvertKit API route for freebie capture
+- **Frontend:** Next.js + Tailwind CSS
+- **CMS:** WordPress (headless) + WPGraphQL + ACF + WPGraphQL for ACF
+- **Email capture:** Mailchimp or ConvertKit via `/api/subscribe`
+- **Hosting:** Vercel (frontend) + managed WordPress host
 
 ## Routes
 
@@ -18,57 +19,42 @@ A calm, content-first Next.js site designed around slow making and nature-inspir
 - `/about` about
 - `/shop` external Etsy redirect
 
-## CMS setup (Contentful)
+## WordPress setup (headless)
 
-Set these environment variables:
+1. Install WordPress on your host.
+2. Install and activate plugins:
+   - WPGraphQL
+   - Advanced Custom Fields
+   - WPGraphQL for ACF
+3. Keep the default **Posts** post type for blog content.
+4. Add an ACF field group for posts with fields:
+   - `introText` (Text Area)
+   - `coverImage` (Image)
+   - `ctaText` (Text, optional)
+5. In WordPress > Settings > Reading, do not rely on theme rendering for frontend UX.
 
-```bash
-CONTENTFUL_SPACE_ID=
-CONTENTFUL_ACCESS_TOKEN=
-CONTENTFUL_ENVIRONMENT=master
-```
-
-Expected fields in `blogPost` content type:
-
-- `title`
-- `slug`
-- `coverImage`
-- `intro`
-- `content` (Rich text)
-- `optionalCtaTitle` (optional)
-- `optionalCtaDescription` (optional)
-- `optionalCtaHref` (optional)
-- `optionalCtaLabel` (optional)
-- `publishedAt` (optional)
-
-## Email setup
-
-Choose provider with:
+## Frontend environment variables
 
 ```bash
+WORDPRESS_GRAPHQL_ENDPOINT=https://your-wordpress-site.com/graphql
+NEXT_PUBLIC_ETSY_SHOP_URL=https://www.etsy.com/shop/your-shop-name
+
 MAIL_PROVIDER=mailchimp # or convertkit
-```
 
-Mailchimp:
-
-```bash
 MAILCHIMP_API_KEY=
 MAILCHIMP_AUDIENCE_ID=
 MAILCHIMP_DC=
-```
 
-ConvertKit:
-
-```bash
 CONVERTKIT_API_KEY=
 CONVERTKIT_FORM_ID=
 ```
 
-## Etsy redirect
+## Data fetching notes
 
-```bash
-NEXT_PUBLIC_ETSY_SHOP_URL=https://www.etsy.com/shop/your-shop-name
-```
+This project uses the Next.js App Router:
+
+- `generateStaticParams` for static blog paths (App Router equivalent of `getStaticPaths`)
+- fetch caching/revalidation for static-like CMS data behavior (App Router equivalent workflow for `getStaticProps`)
 
 ## Run
 
@@ -76,3 +62,9 @@ NEXT_PUBLIC_ETSY_SHOP_URL=https://www.etsy.com/shop/your-shop-name
 npm install
 npm run dev
 ```
+
+## Future-ready notes
+
+- Route groups can be added for a future `/app` product section.
+- i18n can be added with locale-segment routing when multilingual content is introduced.
+- Shop route is decoupled now so an internal shop can replace Etsy later.

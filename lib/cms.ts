@@ -1,73 +1,138 @@
 import { mockPosts } from './mock-data';
 import { BlogPost } from './types';
 
-const SPACE_ID = process.env.CONTENTFUL_SPACE_ID;
-const ENVIRONMENT = process.env.CONTENTFUL_ENVIRONMENT ?? 'master';
-const ACCESS_TOKEN = process.env.CONTENTFUL_ACCESS_TOKEN;
+const WORDPRESS_GRAPHQL_ENDPOINT = process.env.WORDPRESS_GRAPHQL_ENDPOINT;
 
-type ContentfulAsset = {
-  fields?: { file?: { url?: string } };
+const canUseWordPress = Boolean(WORDPRESS_GRAPHQL_ENDPOINT);
+
+type WPGraphQLResponse<TData> = {
+  data?: TData;
+  errors?: Array<{ message: string }>;
 };
 
-type ContentfulPost = {
-  fields: {
-    title: string;
-    slug: string;
-    intro: string;
-    content: unknown;
-    coverImage?: ContentfulAsset;
-    optionalCtaTitle?: string;
-    optionalCtaDescription?: string;
-    optionalCtaHref?: string;
-    optionalCtaLabel?: string;
-    publishedAt?: string;
+type WPGraphQLPostNode = {
+  title: string;
+  slug: string;
+  content?: string;
+  excerpt?: string;
+  date?: string;
+  featuredImage?: {
+    node?: {
+      sourceUrl?: string;
+    };
+  };
+  acf?: {
+    introText?: string;
+    coverImage?: {
+      node?: {
+        sourceUrl?: string;
+      };
+    };
+    ctaText?: string;
   };
 };
 
-const canUseContentful = Boolean(SPACE_ID && ACCESS_TOKEN);
+const ALL_POSTS_QUERY = `
+  query AllPosts {
+    posts(first: 100, where: { status: PUBLISH }) {
+      nodes {
+        title
+        slug
+        content
+        excerpt
+        date
+        featuredImage {
+          node {
+            sourceUrl
+          }
+        }
+        acf {
+          introText
+          ctaText
+          coverImage {
+            node {
+              sourceUrl
+            }
+          }
+        }
+      }
+    }
+  }
+`;
 
-async function fetchContentful(query: string) {
-  const url = `https://cdn.contentful.com/spaces/${SPACE_ID}/environments/${ENVIRONMENT}/entries?${query}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+const POST_BY_SLUG_QUERY = `
+  query PostBySlug($slug: ID!) {
+    post(id: $slug, idType: SLUG) {
+      title
+      slug
+      content
+      excerpt
+      date
+      featuredImage {
+        node {
+          sourceUrl
+        }
+      }
+      acf {
+        introText
+        ctaText
+        coverImage {
+          node {
+            sourceUrl
+          }
+        }
+      }
+    }
+  }
+`;
+
+function stripHtml(input?: string) {
+  if (!input) return '';
+  return input.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function mapPost(node: WPGraphQLPostNode): BlogPost {
+  return {
+    title: stripHtml(node.title),
+    slug: node.slug,
+    coverImage:
+      node.acf?.coverImage?.node?.sourceUrl ?? node.featuredImage?.node?.sourceUrl ?? mockPosts[0].coverImage,
+    introText: node.acf?.introText ?? stripHtml(node.excerpt),
+    content: node.content ?? '<p>Content coming soon.</p>',
+    ctaText: node.acf?.ctaText,
+    publishedAt: node.date
+  };
+}
+
+async function fetchWordPressGraphQL<TData>(query: string, variables?: Record<string, unknown>): Promise<TData> {
+  const response = await fetch(WORDPRESS_GRAPHQL_ENDPOINT!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ query, variables }),
     next: { revalidate: 120 }
   });
 
   if (!response.ok) {
-    throw new Error(`Contentful error: ${response.status}`);
+    throw new Error(`WPGraphQL request failed with status ${response.status}`);
   }
 
-  return response.json();
-}
+  const payload = (await response.json()) as WPGraphQLResponse<TData>;
 
-function mapPost(item: ContentfulPost): BlogPost {
-  const imageUrl = item.fields.coverImage?.fields?.file?.url;
+  if (payload.errors?.length || !payload.data) {
+    throw new Error(payload.errors?.[0]?.message ?? 'Invalid WPGraphQL response');
+  }
 
-  return {
-    title: item.fields.title,
-    slug: item.fields.slug,
-    intro: item.fields.intro,
-    content: item.fields.content,
-    coverImage: imageUrl ? `https:${imageUrl}` : mockPosts[0].coverImage,
-    publishedAt: item.fields.publishedAt,
-    optionalCta:
-      item.fields.optionalCtaTitle && item.fields.optionalCtaHref && item.fields.optionalCtaLabel
-        ? {
-            title: item.fields.optionalCtaTitle,
-            description: item.fields.optionalCtaDescription ?? '',
-            href: item.fields.optionalCtaHref,
-            label: item.fields.optionalCtaLabel
-          }
-        : undefined
-  };
+  return payload.data;
 }
 
 export async function getAllPosts(): Promise<BlogPost[]> {
-  if (!canUseContentful) return mockPosts;
+  if (!canUseWordPress) return mockPosts;
 
   try {
-    const data = await fetchContentful('content_type=blogPost&order=-fields.publishedAt');
-    return (data.items as ContentfulPost[]).map(mapPost);
+    const data = await fetchWordPressGraphQL<{ posts: { nodes: WPGraphQLPostNode[] } }>(ALL_POSTS_QUERY);
+    return data.posts.nodes.map(mapPost);
   } catch {
     return mockPosts;
   }
@@ -79,6 +144,14 @@ export async function getFeaturedPosts(limit = 3): Promise<BlogPost[]> {
 }
 
 export async function getPostBySlug(slug: string): Promise<BlogPost | undefined> {
-  const posts = await getAllPosts();
-  return posts.find((post) => post.slug === slug);
+  if (!canUseWordPress) return mockPosts.find((post) => post.slug === slug);
+
+  try {
+    const data = await fetchWordPressGraphQL<{ post: WPGraphQLPostNode | null }>(POST_BY_SLUG_QUERY, { slug });
+
+    if (!data.post) return undefined;
+    return mapPost(data.post);
+  } catch {
+    return mockPosts.find((post) => post.slug === slug);
+  }
 }
